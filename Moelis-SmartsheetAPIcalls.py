@@ -1,0 +1,111 @@
+import smartsheet
+from collections import defaultdict
+from datetime import datetime
+import win32com.client as win32
+
+# Initialize Smartsheet client
+smartsheet_client = smartsheet.Smartsheet('wPPwSUgWUci8VrivXhXtZ26cU3D847AzujVyU')
+
+# Retrieve the specific sheet using your sheet ID
+sheet_id = '4115643326484356'  # Provided Smartsheet ID
+sheet = smartsheet_client.Sheets.get_sheet(sheet_id)
+
+# Identify column indices for "Finding | Location", "Criticality", "Status", "Level of Effort Required", and "Level of Effort Remaining"
+column_indices = {}
+for i, column in enumerate(sheet.columns):
+    if column.title in ["Finding | Location", "Criticality", "Status", "Level of Effort Required", "Level of Effort Remaining"]:
+        column_indices[column.title] = i  # Store the title as a string
+
+# Ensure all required columns are found
+required_columns = ["Finding | Location", "Criticality", "Status", "Level of Effort Required", "Level of Effort Remaining"]
+if not all(col in column_indices for col in required_columns):
+    print(f"One or more required columns not found. Columns found: {column_indices}")
+else:
+    # Dictionary to hold the data: {Location: {Status: [(Finding)]}, and effort details for % Complete}
+    grouped_data = defaultdict(lambda: defaultdict(list))
+    effort_data = defaultdict(lambda: {"total_required": 0, "total_remaining": 0})
+    overall_effort_required = 0
+    overall_effort_completed = 0
+    current_finding = None  # Track the current parent (Finding)
+
+    # Loop through rows and cluster based on Criticality, Finding, Location, Status, and effort data
+    for row in sheet.rows:
+        row_data = {col: row.cells[i].value if i < len(row.cells) else None for col, i in column_indices.items()}
+
+        # Check if this row is a parent row (Finding) and ensure Criticality exists
+        if row.parent_id is None and row_data.get("Criticality") == "Critical":
+            # It's a parent (Finding)
+            current_finding = row_data["Finding | Location"]
+        elif current_finding:
+            # It's a child (Location) row
+            location = row_data["Finding | Location"]
+            status = row_data["Status"]
+            effort_required = row_data["Level of Effort Required"] or 0
+            effort_remaining = row_data["Level of Effort Remaining"] or 0
+
+            # Group all status data for the individual site
+            if location and status:
+                grouped_data[location][status].append(current_finding)
+                effort_data[location]["total_required"] += effort_required
+                effort_data[location]["total_remaining"] += effort_remaining
+
+            # Accumulate the total project effort
+            overall_effort_required += effort_required
+
+            # Add to overall completed effort only if the task is 100% complete
+            if status == "Complete":
+                overall_effort_completed += effort_required
+
+    # Calculate overall % Complete
+    if overall_effort_required > 0:
+        overall_percent_complete = int((overall_effort_completed / overall_effort_required) * 100)
+    else:
+        overall_percent_complete = 0  # Handle division by zero if no effort required is specified
+
+    # Generate Weekly Status Report as HTML
+    report_date = datetime.now().strftime("%Y-%m-%d")
+    report_body = f"<h2>Weekly Status Report - {report_date}</h2>"
+    report_body += f"<p><b>Overall Summary:</b><br>Total % Complete (Based on Completed Tasks Only): {overall_percent_complete}%</p>"
+    total_findings = 0
+
+    if not grouped_data:
+        report_body += "<p>No data matched the criteria.</p>"
+    else:
+        for location, status_data in grouped_data.items():
+            location_total = sum(len(findings) for findings in status_data.values())
+            total_findings += location_total
+
+            # Calculate % Complete for the location based on total effort required and remaining
+            total_required = effort_data[location]["total_required"]
+            total_remaining = effort_data[location]["total_remaining"]
+            if total_required > 0:
+                percent_complete = int(((total_required - total_remaining) / total_required) * 100)
+            else:
+                percent_complete = 0  # Handle division by zero if no effort required is specified
+
+            # Bold the location line
+            report_body += f"<p><b>Location: {location} (Total Findings: {location_total}) - {percent_complete}%</b></p>"
+
+            for status, findings in status_data.items():
+                # Italicize the status line
+                report_body += f"<p><i>{status}:</i><br>"
+                for finding in findings:
+                    report_body += f"&nbsp;&nbsp;&nbsp;&nbsp;{finding}<br>"
+                report_body += "</p>"
+
+    # Add Overall Summary to the end of the report
+    report_body += f"<p><b>Total Findings across all locations: {total_findings}</b></p>"
+
+    # Setup Outlook Email with HTML Body
+    outlook = win32.Dispatch('outlook.application')
+    mail = outlook.CreateItem(0)
+
+    # Set recipients, subject, and HTML body
+    recipients = "ymecca@katalystng.com; mdelgado@katalystng.com"
+    subject = f"Moelis Remediation Effort Project Status Report {report_date} P20240723.0001"
+    mail.To = recipients
+    mail.Subject = subject
+    mail.HTMLBody = report_body  # Use HTMLBody for formatted email
+
+    # Display the email (do not send it automatically)
+    mail.Display()  # This will open the email for review
