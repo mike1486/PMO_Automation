@@ -4,10 +4,10 @@ from datetime import datetime
 import win32com.client as win32
 
 # Initialize Smartsheet client
-smartsheet_client = smartsheet.Smartsheet('wPPwSUgWUci8VrivXhXtZ26cU3D847AzujVyU')
+smartsheet_client = smartsheet.Smartsheet('ADD YOUR SMARTSHEET TOKEN HERE')
 
 # Retrieve the specific sheet using your sheet ID
-sheet_id = '4115643326484356'  # Provided Smartsheet ID
+sheet_id = 'ADD SHEET ID HERE'  # Provided Smartsheet ID
 sheet = smartsheet_client.Sheets.get_sheet(sheet_id)
 
 # Identify column indices for "Finding | Location", "Criticality", "Status", "Level of Effort Required", and "Level of Effort Remaining"
