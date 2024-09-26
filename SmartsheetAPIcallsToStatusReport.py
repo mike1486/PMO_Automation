@@ -101,8 +101,8 @@ else:
     mail = outlook.CreateItem(0)
 
     # Set recipients, subject, and HTML body
-    recipients = "ymecca@katalystng.com; mdelgado@katalystng.com"
-    subject = f"Moelis Remediation Effort Project Status Report {report_date} P20240723.0001"
+    recipients = "ADD RECIPIENTS HERE - MULTIPLE RECIPIENTS SEPARATED WITH ;"
+    subject = f" Project Status Report {report_date} "
     mail.To = recipients
     mail.Subject = subject
     mail.HTMLBody = report_body  # Use HTMLBody for formatted email
